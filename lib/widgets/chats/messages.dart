@@ -1,88 +1,69 @@
+import 'package:chat_app/providers/chat_controller.dart';
+import 'package:chat_app/providers/chat_provider.dart';
+import 'package:chat_app/providers/firebase_providers.dart';
 import 'package:chat_app/widgets/chats/message_bubble.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class Messages extends StatelessWidget {
+class Messages extends ConsumerWidget {
   const Messages({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    void deleteWithSnackBar({
-      required BuildContext context,
-      required String docId,
-      required Map<String, dynamic> messageData,
-    }) async {
-      final scaffold = ScaffoldMessenger.of(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chatAsync = ref.watch(chatMessagesProvider);
+    final user = ref.watch(firebaseAuthProvider).currentUser;
 
-      // First delete from Firestore
-      await FirebaseFirestore.instance.collection('chat').doc(docId).delete();
+    return chatAsync.when(
+      data: (chatSnapshot) {
+        final chatDocs = chatSnapshot.docs;
 
-      scaffold.clearSnackBars();
+        return ListView.builder(
+          reverse: true,
+          itemCount: chatDocs.length,
+          itemBuilder: (ctx, index) {
+            final doc = chatDocs[index];
+            final data = doc.data() as Map<String, dynamic>;
 
-      scaffold.showSnackBar(
-        SnackBar(
-          content: const Text('Message deleted'),
-          duration: const Duration(seconds: 4),
-          action: SnackBarAction(
-            label: 'UNDO',
-            onPressed: () async {
-              // Restore message if undo pressed
-              await FirebaseFirestore.instance
-                  .collection('chat')
-                  .doc(docId)
-                  .set(messageData);
-            },
-          ),
-        ),
-      );
-    }
+            final isMe = data['userId'] == user?.uid;
 
-    return FutureBuilder(
-      future: Future.value(FirebaseAuth.instance.currentUser),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CircularProgressIndicator());
-        }
+            return GestureDetector(
+              onLongPress: () async {
+                if (!isMe) return;
 
-        return StreamBuilder(
-          stream: FirebaseFirestore.instance
-              .collection("chat")
-              .orderBy('createdAt', descending: true)
-              .snapshots(),
-          builder: (ctx, chatSnapshot) {
-            if (chatSnapshot.connectionState == ConnectionState.waiting) {
-              return Center(child: CircularProgressIndicator());
-            }
-            final chatDocs = chatSnapshot.data?.docs;
-            return ListView.builder(
-              reverse: true,
-              itemCount: chatDocs?.length,
-              itemBuilder: (ctx, index) {
-                final doc = chatDocs![index];
-                return GestureDetector(
-                  onLongPress: () {
-                    if (doc['userId'] ==
-                        FirebaseAuth.instance.currentUser!.uid) {
-                      deleteWithSnackBar(
-                        context: context,
-                        docId: doc.id,
-                        messageData: doc.data(),
-                      );
-                    }
-                  },
-                  child: MessageBubble(
-                    uniqueKey: ValueKey(chatDocs?[index].id),
-                    message: chatDocs?[index]['text'],
-                    userName: chatDocs?[index]['username'],
-                    isMe: chatDocs?[index]['userId'] == snapshot.data?.uid,
+                //first delete
+                await ref
+                    .read(chatControllerProvider)
+                    .deleteMessage(docId: doc.id);
+
+                ScaffoldMessenger.of(context).clearSnackBars();
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text("Message deleted"),
+                    duration: const Duration(seconds: 4),
+                    action: SnackBarAction(
+                      label: "UNDO",
+                      onPressed: () async {
+                        await ref
+                            .read(chatControllerProvider)
+                            .restoreMessage(docId: doc.id, data: data);
+                      },
+                    ),
                   ),
                 );
               },
+              child: MessageBubble(
+                uniqueKey: ValueKey(doc.id),
+                message: data['text'],
+                userName: data['username'],
+                isMe: isMe,
+              ),
             );
           },
         );
       },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text(e.toString())),
     );
   }
 }

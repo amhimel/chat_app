@@ -1,81 +1,49 @@
-import 'package:chat_app/screens/chat_screen.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:chat_app/providers/auth_controller.dart';
+import 'package:chat_app/widgets/auth/auth_form.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/services.dart';
-import '../widgets/auth/auth_form.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class AuthScreen extends StatefulWidget {
+class AuthScreen extends ConsumerWidget {
   const AuthScreen({super.key});
 
-  @override
-  State<AuthScreen> createState() => _AuthScreenState();
-}
+@override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authControllerProvider);
 
-class _AuthScreenState extends State<AuthScreen> {
-  final _auth = FirebaseAuth.instance;
-  var _isLoading = false;
-
-  void _submitAuthForm(
-    String username,
-    String email,
-    String password,
-    bool isLogin,
-    BuildContext ctx,
-  ) async {
-    UserCredential authResult;
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-      if (isLogin) {
-        authResult = await _auth.signInWithEmailAndPassword(
-          email: email,
-          password: password,
+    void submit(
+      String username,
+      String email,
+      String password,
+      bool isLogin,
+      BuildContext ctx,
+    ) async {
+      try {
+        await ref
+            .read(authControllerProvider.notifier)
+            .submitAuthForm(
+              username: username,
+              email: email,
+              password: password,
+              isLogin: isLogin,
+            );
+      } catch (e) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: Theme.of(ctx).colorScheme.error,
+          ),
         );
-      } else {
-        authResult = await _auth.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(authResult.user?.uid)
-            .set({"username": username, "email": email});
       }
-      Navigator.of(
-        ctx,
-      ).push(MaterialPageRoute(builder: (ctx) => const ChatScreen()));
-
-    } on PlatformException catch (err) {
-      String? message = "An error occurred, please check your Credential";
-      if (err.message != null) {
-        message = err.message;
-      }
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        SnackBar(
-          content: Text(message!),
-          backgroundColor: Theme.of(ctx).colorScheme.error,
-        ),
-      );
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (err) {
-      print(err);
-      setState(() {
-        _isLoading = false;
-      });
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Auth Screen')),
+      appBar: AppBar(title: const Text('Auth Screen')),
       backgroundColor: Theme.of(context).primaryColor,
-      body: AuthForm(submitFn: _submitAuthForm, isLoading: _isLoading),
+      body: AuthForm(
+        submitFn: submit,
+        isLoading: authState.isLoading, 
+      ),
     );
   }
+
 }

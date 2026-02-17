@@ -1,49 +1,42 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:chat_app/providers/chat_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class NewMessages extends StatefulWidget {
+class NewMessages extends ConsumerStatefulWidget {
   const NewMessages({super.key});
 
   @override
-  State<NewMessages> createState() => _NewMessagesState();
+  ConsumerState<NewMessages> createState() => _NewMessagesState();
 }
 
-class _NewMessagesState extends State<NewMessages> {
+class _NewMessagesState extends ConsumerState<NewMessages> {
+  final _controller = TextEditingController();
   var _enteredMessage = '';
-  final _messageController = TextEditingController();
 
   void _sendMessage() async {
-    // to hide the keyboard after sending message
     FocusScope.of(context).unfocus();
-    final userId =  await FirebaseAuth.instance.currentUser;
-    final userData =  await FirebaseFirestore.instance
-        .collection('users')
-        .doc(userId?.uid)
-        .get();
-    FirebaseFirestore.instance.collection("chat").add({
-      'text': _enteredMessage,
-      'createdAt': Timestamp.now(),
-      'userId': userId?.uid,
-      'username': userData['username'],
-    });
-    _messageController.clear();
 
+    await ref.read(chatControllerProvider).sendMessage(_enteredMessage);
+
+    _controller.clear();
+    setState(() {
+      _enteredMessage = '';
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.only(top: 8),
-      padding: EdgeInsets.all(8),
+      margin: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(8),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: TextField(
-              controller: _messageController,
-              decoration: InputDecoration(labelText: "Send a message..."),
+              controller: _controller,
               onChanged: (value) {
-                //we can use this value to send message
                 setState(() {
                   _enteredMessage = value;
                 });
